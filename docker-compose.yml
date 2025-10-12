@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    container_name: nutrifit-backend
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      # This tells the frontend where to find the backend API within the Docker network.
+      # 'backend' is the name of the service defined above.
+      - API_URL=http://backend:8000
+    depends_on:
+      - backend
+    container_name: nutrifit-frontend
+
+# Note: This compose file is configured for production. For development with
+# hot-reloading, you would add `volumes` to mount your local code into the containers
+# and change the backend `command` to use `uvicorn --reload`.
+# c:\Users\nrk06\Desktop\NutriFit\frontend\Dockerfile
+
+FROM python:3.11-slim
+WORKDIR /app
+
+# requirements.txt now lives inside the frontend directory
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8501
+CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+FROM python:3.11-slim
+WORKDIR /app
+
+# Copy the shared requirements into the backend image
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# Copy the entire backend codebase
+COPY backend ./backend
+
+EXPOSE 8000
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+FROM python:3.11-slim
+
+# Set working directory for backend app
+WORKDIR /app
+
+# Copy shared requirements into the image
+COPY requirements.txt ./
+
+# Install dependencies
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# Copy backend source code
+COPY backend/ ./backend/
+
+# Expose backend port
+EXPOSE 8000
+
+# Default command to launch FastAPI via Uvicorn
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
