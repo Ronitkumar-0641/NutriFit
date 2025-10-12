@@ -78,7 +78,7 @@ if ($remoteExists) {
     Write-Host "3. Description: AI-powered wellness app with personalized nutrition plans" -ForegroundColor Cyan
     Write-Host "4. Choose Public or Private" -ForegroundColor Cyan
     Write-Host "5. DO NOT check any boxes (no README, no .gitignore, no license)" -ForegroundColor Cyan
-    Write-Host "6. Click 'Create repository'" -ForegroundColor Cyan
+    Write-Host "6. Click Create repository" -ForegroundColor Cyan
     Write-Host ""
     
     $repoUrl = Read-Host "Enter your GitHub repository URL (e.g., https://github.com/username/NutriFit.git)"
