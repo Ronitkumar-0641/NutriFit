@@ -1,56 +1,79 @@
+"""
+Database helpers for meals and activities.
+Safe for Streamlit Cloud (lazy Supabase initialization).
+"""
+
 import os
 from datetime import datetime
-from typing import Optional, Dict, List
-from dataclasses import dataclass
+from typing import List, Dict, Optional
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
-
-_in_memory_meals: List[dict] = []
-_in_memory_activities: List[dict] = []
+# In-memory fallback storage
+_in_memory_meals: List[Dict] = []
+_in_memory_activities: List[Dict] = []
 
 
-def connect_supabase():
-    """Attempt to create a Supabase client if credentials are present.
-    Returns None if not configured. This keeps the app runnable without Supabase.
+# -------------------------------
+# Supabase client (LAZY, SAFE)
+# -------------------------------
+
+def get_supabase_client():
     """
-    if not SUPABASE_URL or not SUPABASE_API_KEY:
+    Lazily create Supabase client.
+    Returns None if credentials are missing or client cannot be created.
+    """
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_API_KEY")
+
+    if not url or not key:
         return None
+
     try:
         from supabase import create_client
-
-        client = create_client(SUPABASE_URL, SUPABASE_API_KEY)
-        return client
+        return create_client(url, key)
     except Exception:
         return None
 
-# Create a single, reusable client instance when the module is loaded.
-_supabase_client = connect_supabase()
 
-def create_meal(meal: dict) -> dict:
-    if _supabase_client:
-        resp = _supabase_client.table("meals").insert(meal).execute()
-        return resp.data[0]
+# -------------------------------
+# Meals
+# -------------------------------
+
+def create_meal(meal: Dict) -> Dict:
+    supabase = get_supabase_client()
+
+    if supabase:
+        resp = supabase.table("meals").insert(meal).execute()
+        if resp.data:
+            return resp.data[0]
+
     meal_id = len(_in_memory_meals) + 1
-    m = {"id": meal_id, **meal}
-    _in_memory_meals.append(m)
-    return m
+    record = {"id": meal_id, **meal}
+    _in_memory_meals.append(record)
+    return record
 
 
-def list_meals() -> List[dict]:
-    if _supabase_client:
-        resp = _supabase_client.table("meals").select("*").execute()
+def list_meals() -> List[Dict]:
+    supabase = get_supabase_client()
+
+    if supabase:
+        resp = supabase.table("meals").select("*").execute()
         return resp.data or []
-    return _in_memory_meals
+
+    return list(_in_memory_meals)
 
 
-def create_activity(activity: dict) -> dict:
-    """Persist a logged activity for the given user."""
-    if _supabase_client:
-        resp = _supabase_client.table("activities").insert(activity).execute()
-        data = resp.data or []
-        if data:
-            return data[0]
+# -------------------------------
+# Activities
+# -------------------------------
+
+def create_activity(activity: Dict) -> Dict:
+    supabase = get_supabase_client()
+
+    if supabase:
+        resp = supabase.table("activities").insert(activity).execute()
+        if resp.data:
+            return resp.data[0]
+
     activity_id = len(_in_memory_activities) + 1
     record = {
         "id": activity_id,
@@ -61,9 +84,11 @@ def create_activity(activity: dict) -> dict:
     return record
 
 
-def list_activities() -> List[dict]:
-    """Return activities associated with the specified user."""
-    if _supabase_client:
-        resp = _supabase_client.table("activities").select("*").execute()
+def list_activities() -> List[Dict]:
+    supabase = get_supabase_client()
+
+    if supabase:
+        resp = supabase.table("activities").select("*").execute()
         return resp.data or []
-    return _in_memory_activities
+
+    return list(_in_memory_activities)
