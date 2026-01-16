@@ -4,24 +4,36 @@ Authentication module using Supabase for user management.
 import os
 from typing import Optional, Dict, Any
 from supabase import create_client, Client
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# Initialize Supabase client
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
-
-if not SUPABASE_URL or not SUPABASE_API_KEY:
-    raise ValueError("SUPABASE_URL and SUPABASE_API_KEY must be set in environment variables")
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_API_KEY)
 
 # Import profile service
 try:
     from .profile_service import ProfileService
 except ImportError:
     from profile_service import ProfileService
+
+
+def get_supabase_client() -> Client:
+    """
+    Lazily create Supabase client.
+    Safe for Streamlit Cloud.
+    """
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
+
+    if not SUPABASE_URL or not SUPABASE_API_KEY:
+        raise RuntimeError("Supabase credentials are missing")
+
+    return create_client(SUPABASE_URL, SUPABASE_API_KEY)
+
+
+def login_user(email: str, password: str) -> Dict[str, Any]:
+    supabase = get_supabase_client()
+    return supabase.auth.sign_in_with_password({
+        "email": email,
+        "password": password
+    })
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_API_KEY)
 
 
 class AuthService:
