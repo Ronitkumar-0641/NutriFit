@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import List, Tuple
 
 from backend.auth import login_user
-from backend.profile_service import get_profile
+from backend.profile_service import ProfileService
 from backend.gemini_service import generate_diet_plan
 
 
