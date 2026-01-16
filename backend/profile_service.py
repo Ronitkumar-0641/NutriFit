@@ -1,32 +1,43 @@
 """
 Profile service for managing user profiles in Supabase.
+Safe for Streamlit Cloud (lazy initialization).
 """
+
 import os
 from typing import Optional, Dict, Any
 from supabase import create_client, Client
-from dotenv import load_dotenv
 
-load_dotenv()
 
-# Initialize Supabase client
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
+# -------------------------------
+# Supabase client (LAZY, SAFE)
+# -------------------------------
 
-if not SUPABASE_URL or not SUPABASE_API_KEY:
-    raise ValueError("SUPABASE_URL and SUPABASE_API_KEY must be set in environment variables")
+def get_supabase_client() -> Client:
+    """
+    Lazily create and return Supabase client.
+    Must NOT run at import time.
+    """
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_API_KEY")
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_API_KEY)
+    if not url or not key:
+        raise RuntimeError("Supabase credentials are missing")
 
+    return create_client(url, key)
+
+
+# -------------------------------
+# Profile Service
+# -------------------------------
 
 class ProfileService:
     """Service for handling user profile operations."""
-    
+
     @staticmethod
     def calculate_bmi(weight_kg: float, height_cm: float) -> float:
-        """Calculate BMI from weight and height."""
         height_m = height_cm / 100.0
         return round(weight_kg / (height_m * height_m), 2)
-    
+
     @staticmethod
     def create_profile(
         user_id: str,
@@ -37,24 +48,11 @@ class ProfileService:
         gender: str,
         fitness_goal: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        Create a user profile in the database.
-        
-        Args:
-            user_id: User's UUID from auth
-            full_name: User's full name
-            weight_kg: Weight in kilograms
-            height_cm: Height in centimeters
-            age: User's age
-            gender: User's gender
-            fitness_goal: Optional fitness goal
-            
-        Returns:
-            Dict containing success status and profile data or error
-        """
         try:
+            supabase = get_supabase_client()
+
             bmi = ProfileService.calculate_bmi(weight_kg, height_cm)
-            
+
             profile_data = {
                 "id": user_id,
                 "full_name": full_name,
@@ -65,49 +63,48 @@ class ProfileService:
                 "bmi": bmi,
                 "fitness_goal": fitness_goal or "general_health"
             }
-            
+
             response = supabase.table("user_profiles").insert(profile_data).execute()
-            
-            if response.data:
-                return {
-                    "success": True,
-                    "profile": response.data[0],
-                    "message": "Profile created successfully"
-                }
-            else:
+
+            if not response.data:
                 return {
                     "success": False,
                     "error": "Failed to create profile"
                 }
-                
+
+            return {
+                "success": True,
+                "profile": response.data[0],
+                "message": "Profile created successfully"
+            }
+
         except Exception as e:
             return {
                 "success": False,
                 "error": f"Error creating profile: {str(e)}"
             }
-    
+
     @staticmethod
     def get_profile(user_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get user profile from database.
-        
-        Args:
-            user_id: User's UUID
-            
-        Returns:
-            Profile data or None
-        """
         try:
-            response = supabase.table("user_profiles").select("*").eq("id", user_id).execute()
-            
-            if response.data and len(response.data) > 0:
+            supabase = get_supabase_client()
+
+            response = (
+                supabase
+                .table("user_profiles")
+                .select("*")
+                .eq("id", user_id)
+                .execute()
+            )
+
+            if response.data:
                 return response.data[0]
+
             return None
-            
-        except Exception as e:
-            print(f"Error getting profile: {e}")
+
+        except Exception:
             return None
-    
+
     @staticmethod
     def update_profile(
         user_id: str,
@@ -117,31 +114,18 @@ class ProfileService:
         gender: Optional[str] = None,
         fitness_goal: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        Update user profile.
-        
-        Args:
-            user_id: User's UUID
-            weight_kg: Optional new weight
-            height_cm: Optional new height
-            age: Optional new age
-            gender: Optional new gender
-            fitness_goal: Optional new fitness goal
-            
-        Returns:
-            Dict containing success status and updated profile or error
-        """
         try:
-            # Get current profile
+            supabase = get_supabase_client()
+
             current_profile = ProfileService.get_profile(user_id)
             if not current_profile:
                 return {
                     "success": False,
                     "error": "Profile not found"
                 }
-            
-            # Build update data
-            update_data = {}
+
+            update_data: Dict[str, Any] = {}
+
             if weight_kg is not None:
                 update_data["weight_kg"] = weight_kg
             if height_cm is not None:
@@ -152,31 +136,35 @@ class ProfileService:
                 update_data["gender"] = gender
             if fitness_goal is not None:
                 update_data["fitness_goal"] = fitness_goal
-            
-            # Recalculate BMI if weight or height changed
+
             final_weight = weight_kg if weight_kg is not None else current_profile["weight_kg"]
             final_height = height_cm if height_cm is not None else current_profile["height_cm"]
-            
+
             if final_weight and final_height:
-                update_data["bmi"] = ProfileService.calculate_bmi(final_weight, final_height)
-            
-            # Update timestamp
-            update_data["updated_at"] = "now()"
-            
-            response = supabase.table("user_profiles").update(update_data).eq("id", user_id).execute()
-            
-            if response.data:
-                return {
-                    "success": True,
-                    "profile": response.data[0],
-                    "message": "Profile updated successfully"
-                }
-            else:
+                update_data["bmi"] = ProfileService.calculate_bmi(
+                    final_weight, final_height
+                )
+
+            response = (
+                supabase
+                .table("user_profiles")
+                .update(update_data)
+                .eq("id", user_id)
+                .execute()
+            )
+
+            if not response.data:
                 return {
                     "success": False,
                     "error": "Failed to update profile"
                 }
-                
+
+            return {
+                "success": True,
+                "profile": response.data[0],
+                "message": "Profile updated successfully"
+            }
+
         except Exception as e:
             return {
                 "success": False,
