@@ -1,5 +1,10 @@
 import os
 import sys
+
+ROOT_DIR = os.path.abspath(".")
+if ROOT_DIR not in sys.path:
+    sys.path.append(ROOT_DIR)
+
 import random
 from datetime import datetime
 from typing import List, Tuple
